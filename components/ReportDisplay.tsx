@@ -1,13 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import Spinner from './Spinner';
 import ClipboardIcon from './icons/ClipboardIcon';
-import ShieldExclamationIcon from './icons/ShieldExclamationIcon';
 import ShieldCheckIcon from './icons/ShieldCheckIcon';
 import InfoCircleIcon from './icons/InfoCircleIcon';
-import ChevronDownIcon from './icons/ChevronDownIcon';
-import Layer3Icon from './icons/Layer3Icon';
-import Layer4Icon from './icons/Layer4Icon';
-import Layer7Icon from './icons/Layer7Icon';
+import ComplianceChart from './ComplianceChart';
+import ShieldExclamationIcon from './icons/ShieldExclamationIcon';
 
 
 interface ReportDisplayProps {
@@ -16,207 +13,233 @@ interface ReportDisplayProps {
   report: string | null;
 }
 
-const RiskBadge: React.FC<{ riskLevel: string }> = ({ riskLevel }) => {
-  const level = riskLevel.toLowerCase();
+const CodeBlock: React.FC<{ code: string }> = ({ code }) => {
+  const [copied, setCopied] = useState(false);
 
-  const riskInfo = useMemo(() => {
-    if (level.includes('high')) {
-      return { text: 'High Risk', color: 'red', icon: <ShieldExclamationIcon className="w-5 h-5" /> };
-    }
-    if (level.includes('moderate')) {
-      return { text: 'Moderate Risk', color: 'amber', icon: <ShieldCheckIcon className="w-5 h-5" /> };
-    }
-    return { text: 'Low Risk', color: 'sky', icon: <InfoCircleIcon className="w-5 h-5" /> };
-  }, [level]);
-
-  const colors = {
-    base: `bg-${riskInfo.color}-500/10 text-${riskInfo.color}-400 ring-${riskInfo.color}-500/30`,
+  const handleCopy = () => {
+    navigator.clipboard.writeText(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
-    <div className={`inline-flex items-center gap-x-2 rounded-full px-3 py-1 text-sm font-semibold ring-1 ring-inset ${colors.base}`}>
-      {riskInfo.icon}
-      {riskInfo.text}
-    </div>
-  );
-};
-
-const ExecutiveSummaryCard: React.FC<{ content: string }> = ({ content }) => {
-  const riskMatch = content.match(/Risk Level: (High|Moderate|Low)/i);
-  const riskLevel = riskMatch ? riskMatch[1] : 'unknown';
-  const summaryText = content.replace(/Risk Level: (High|Moderate|Low)\s*/i, '').trim();
-
-  return (
-    <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-2xl font-bold text-slate-100">Executive Summary</h2>
-        <RiskBadge riskLevel={riskLevel} />
-      </div>
-      <p className="text-slate-300 leading-relaxed">{summaryText}</p>
-    </div>
-  );
-};
-
-const AccordionItem: React.FC<{ title: string; icon: React.ReactNode; children: React.ReactNode }> = ({ title, icon, children }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  return (
-    <div className="border-b border-slate-700">
-      <button
-        className="w-full flex justify-between items-center text-left p-4 hover:bg-slate-700/50 transition-colors"
-        onClick={() => setIsOpen(!isOpen)}
-        aria-expanded={isOpen}
-      >
-        <span className="flex items-center gap-3 font-semibold text-lg text-slate-200">
-          {icon}
-          {title}
-        </span>
-        <ChevronDownIcon className={`w-5 h-5 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+    <div className="bg-slate-900/70 rounded-md p-4 relative font-mono text-sm text-slate-300 overflow-x-auto">
+      <button onClick={handleCopy} className="absolute top-2 right-2 p-1.5 rounded-md bg-slate-700 hover:bg-slate-600 transition-colors">
+        <ClipboardIcon copied={copied} />
       </button>
-      <div className={`overflow-hidden transition-all duration-300 ease-in-out ${isOpen ? 'max-h-full' : 'max-h-0'}`}>
-        <div className="p-4 pl-12 text-slate-300 prose prose-invert max-w-none prose-p:my-1 prose-ul:list-disc prose-ul:my-2">
-          {children}
-        </div>
-      </div>
+      <pre><code>{code}</code></pre>
     </div>
   );
 };
 
-const layerIcons: { [key: string]: React.ReactNode } = {
-  'layer 7': <Layer7Icon className="text-teal-400" />,
-  'layer 4': <Layer4Icon className="text-sky-400" />,
-  'layer 3': <Layer3Icon className="text-indigo-400" />,
+// FIX: Added robust parsing logic to correctly interpret the structured markdown report from the AI.
+// --- Robust Parsing Logic ---
+
+interface RemediationItem {
+  violationId: string;
+  issue: string;
+  ruleAffected: string;
+  standard: string;
+  osiLayer: string;
+  fix: string;
+}
+
+const parseSection = (report: string, title: string): string => {
+  const regex = new RegExp(`### ${title}(.*?)(### |$)`, 'is');
+  const match = report.match(regex);
+  return match ? match[1].trim() : '';
 };
 
-const RemediationTable: React.FC<{ content: string }> = ({ content }) => {
-    const rows = content.trim().split('\n').slice(2); // remove header and separator
-    const headers = content.trim().split('\n')[0].split('|').slice(1,-1).map(h => h.trim());
+const parseExecutiveSummary = (report: string): { content: string; riskLevel: string } => {
+  const summarySection = parseSection(report, 'A. Executive Summary');
+  const riskMatch = summarySection.match(/Risk Level:\s*(High|Moderate|Low)/i);
+  const riskLevel = riskMatch ? riskMatch[1] : 'Moderate';
+  const content = summarySection.replace(/Risk Level:\s*(High|Moderate|Low)/i, '').trim();
+  return { content, riskLevel };
+};
 
-    return (
-        <div className="overflow-x-auto">
-            <table className="w-full my-4 border-collapse text-sm text-left text-slate-300">
-                <thead className="bg-slate-700">
-                    <tr>
-                        {headers.map(header => <th key={header} className="border-b border-slate-600 p-3 font-semibold">{header}</th>)}
-                    </tr>
-                </thead>
-                <tbody>
-                    {rows.map((row, rowIndex) => (
-                        <tr key={rowIndex} className="bg-slate-800 even:bg-slate-800/50 hover:bg-slate-700/50">
-                            {row.split('|').slice(1,-1).map((cell, cellIndex) => {
-                                const isCode = cell.trim().startsWith('`') && cell.trim().endsWith('`');
-                                const cellContent = isCode ? cell.trim().slice(1, -1) : cell.trim();
-                                const isFixColumn = headers[cellIndex]?.toLowerCase().includes('fix');
-                                
-                                return (
-                                    <td key={cellIndex} className="border-b border-slate-700 p-3 align-top">
-                                        {isFixColumn && isCode ? (
-                                            <div className="relative bg-slate-900 p-2 rounded-md font-mono text-cyan-400 text-xs group">
-                                                <code>{cellContent}</code>
-                                                <button 
-                                                    onClick={() => navigator.clipboard.writeText(cellContent)}
-                                                    className="absolute top-1 right-1 p-1 bg-slate-700 rounded-md opacity-0 group-hover:opacity-100 transition-opacity"
-                                                    aria-label="Copy command"
-                                                >
-                                                    <ClipboardIcon copied={false} />
-                                                </button>
-                                            </div>
-                                        ) : (
-                                            cellContent
-                                        )}
-                                    </td>
-                                );
-                            })}
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
-        </div>
-    );
+const parseRemediationPlan = (report: string): RemediationItem[] => {
+  const planSection = parseSection(report, 'C. Detailed Remediation Plan');
+  if (!planSection) return [];
+
+  const items: RemediationItem[] = [];
+  const itemBlocks = planSection.split(/(?=Violation ID: R-\d+)/).filter(block => block.trim() !== '');
+
+  for (const block of itemBlocks) {
+    const lines = block.trim().split('\n');
+    const item: Partial<RemediationItem> = {};
+    let isReadingFix = false;
+    const fixLines: string[] = [];
+
+    for (const line of lines) {
+      if (isReadingFix) {
+        if (line.trim() === '```') {
+          isReadingFix = false;
+        } else {
+          fixLines.push(line);
+        }
+        continue;
+      }
+
+      const match = line.match(/^([^:]+):\s*(.*)$/);
+      if (!match) continue;
+
+      const [, key, value] = match;
+      const trimmedKey = key.trim();
+      const trimmedValue = value.trim();
+
+      switch (trimmedKey) {
+        case 'Violation ID':
+          item.violationId = trimmedValue;
+          break;
+        case 'The Issue/Violation':
+          item.issue = trimmedValue;
+          break;
+        case 'Rule Affected':
+          item.ruleAffected = trimmedValue;
+          break;
+        case 'Compliance Standard':
+          item.standard = trimmedValue;
+          break;
+        case 'OSI Layer':
+          item.osiLayer = trimmedValue;
+          break;
+        case 'Recommended Fix':
+          isReadingFix = true;
+          if (trimmedValue.startsWith('```')) {
+            fixLines.push(trimmedValue.substring(3));
+          }
+          break;
+      }
+    }
+    item.fix = fixLines.join('\n').replace(/^[a-z-]+\n/, '').trim(); // Remove language hint like `cisco-cli`
+
+    if (item.violationId && item.issue && item.ruleAffected && item.standard && item.osiLayer && item.fix) {
+      items.push(item as RemediationItem);
+    }
+  }
+  return items;
+};
+
+// --- Helper Components ---
+
+const SimpleMarkdown: React.FC<{ text: string }> = ({ text }) => {
+  const lines = text.split('\n').filter(line => line.trim() !== '');
+  return (
+    <div className="space-y-2">
+      {lines.map((line, index) => {
+        if (line.trim().startsWith('*') || line.trim().startsWith('-')) {
+          return <p key={index} className="pl-4 relative before:content-['•'] before:absolute before:left-0">{line.trim().substring(1).trim()}</p>;
+        }
+        return <p key={index}>{line}</p>;
+      })}
+    </div>
+  );
 };
 
 const ReportDisplay: React.FC<ReportDisplayProps> = ({ isLoading, error, report }) => {
-  const sections = useMemo(() => {
-    if (!report) return null;
-    const summary = report.match(/## Executive Summary\s*([\s\S]*?)(?=## |$)/);
-    const findings = report.match(/## Findings by OSI Layer\s*([\s\S]*?)(?=## |$)/);
-    const remediation = report.match(/## Detailed Remediation Plan\s*([\s\S]*?)(?=## |$)/);
-    
-    const layerFindings = findings ? findings[1].split(/(?=### Layer)/).filter(p => p.trim()) : [];
+  if (isLoading) {
+    return <Spinner />;
+  }
 
-    return {
-      summary: summary ? summary[1].trim() : '',
-      layers: layerFindings.map(layer => {
-        const [title, ...content] = layer.trim().split('\n');
-        return { title: title.replace(/###\s*/, ''), content: content.join('\n') };
-      }),
-      remediation: remediation ? remediation[1].trim() : '',
-    };
-  }, [report]);
-
-  const renderContent = () => {
-    if (isLoading) {
-      return (
-        <div className="text-center">
-          <Spinner />
-          <p className="text-slate-400 text-lg">Generating your comprehensive report...</p>
-          <p className="text-slate-500 mt-2">This may take a moment.</p>
-        </div>
-      );
-    }
-    if (error) {
-      return (
-        <div className="bg-red-900/50 border border-red-700 text-red-300 p-4 rounded-lg">
-          <h3 className="font-bold">Error</h3>
-          <p>{error}</p>
-        </div>
-      );
-    }
-    if (report && sections) {
-      return (
-        <div className="w-full space-y-8">
-            {sections.summary && <ExecutiveSummaryCard content={sections.summary} />}
-            
-            {sections.layers.length > 0 && (
-                <div>
-                    <h2 className="text-2xl font-bold text-slate-100 mb-4">Findings by OSI Layer</h2>
-                    <div className="bg-slate-800/50 rounded-lg border border-slate-700">
-                        {sections.layers.map(({ title, content }) => (
-                            <AccordionItem 
-                                key={title} 
-                                title={title}
-                                icon={Object.entries(layerIcons).find(([key]) => title.toLowerCase().includes(key))?.[1] || <div />}
-                            >
-                                <div dangerouslySetInnerHTML={{__html: content.replace(/\n/g, '<br />') }}/>
-                            </AccordionItem>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {sections.remediation && (
-                 <div>
-                    <h2 className="text-2xl font-bold text-slate-100 mb-4">Detailed Remediation Plan</h2>
-                    <div className="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
-                        <RemediationTable content={sections.remediation} />
-                    </div>
-                </div>
-            )}
-        </div>
-      );
-    }
+  if (error) {
     return (
-      <div className="text-center text-slate-500 py-10">
-        <p>Your compliance report will be displayed here.</p>
-        <p>Please provide the required inputs above to begin.</p>
+      <div className="mt-8 p-6 bg-red-900/50 border border-red-700 rounded-lg text-red-300">
+        <h2 className="font-bold text-lg mb-2">Error</h2>
+        <p>{error}</p>
       </div>
     );
-  };
+  }
+
+  if (!report) {
+    return null;
+  }
+  
+  // FIX: Replaced basic string splitting with robust parsing functions.
+  // --- Data Extraction using Robust Parsers ---
+  const { content: executiveSummary, riskLevel } = parseExecutiveSummary(report);
+  const findings = parseSection(report, 'B. Findings by OSI Layer');
+  const remediationItems = parseRemediationPlan(report);
+
+  // FIX: Implemented dynamic UI based on parsed risk level.
+  const riskConfig = {
+    High: { icon: ShieldExclamationIcon, color: 'text-red-400', badge: 'bg-red-900/80 text-red-300' },
+    Moderate: { icon: ShieldCheckIcon, color: 'text-yellow-400', badge: 'bg-yellow-900/80 text-yellow-300' },
+    Low: { icon: ShieldCheckIcon, color: 'text-green-400', badge: 'bg-green-900/80 text-green-300' },
+  }[riskLevel] || { icon: ShieldCheckIcon, color: 'text-yellow-400', badge: 'bg-yellow-900/80 text-yellow-300' };
+
+  const RiskIcon = riskConfig.icon;
 
   return (
-    <div className="w-full max-w-4xl mx-auto mt-8">
-      <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl shadow-lg p-6 md:p-8 border border-slate-700 min-h-[200px] flex items-center justify-center">
-        {renderContent()}
-      </div>
+    <div className="mt-8 space-y-8">
+      {/* Executive Summary */}
+      <section className="p-6 bg-slate-800 rounded-lg border border-slate-700 relative">
+        <div className="flex items-start mb-3">
+          <RiskIcon className={`h-7 w-7 mr-3 shrink-0 ${riskConfig.color}`} />
+          <h2 className="text-2xl font-bold text-slate-100">Executive Summary</h2>
+        </div>
+        <span className={`absolute top-4 right-4 px-3 py-1 text-sm font-semibold rounded-full ${riskConfig.badge}`}>{riskLevel} Risk</span>
+        <div className="text-slate-300 pl-10">
+          <SimpleMarkdown text={executiveSummary || 'No summary available.'} />
+        </div>
+      </section>
+      
+      {/* Compliance Chart */}
+      <ComplianceChart remediationItems={remediationItems} />
+
+      {/* Findings */}
+      <section className="p-6 bg-slate-800 rounded-lg border border-slate-700">
+         <div className="flex items-center mb-3">
+           <InfoCircleIcon className="h-7 w-7 mr-3 text-blue-400" />
+           <h2 className="text-2xl font-bold text-slate-100">Findings Details</h2>
+         </div>
+         <div className="text-slate-300 prose prose-invert max-w-none">
+           {findings?.split(/####\s*/).filter(s => s.trim() !== '').map((section, index) => {
+             const [title, ...contentArr] = section.trim().split('\n');
+             const content = contentArr.join('\n');
+             return (
+               <div key={index} className="mt-4">
+                 <h4 className="font-bold text-lg text-slate-200">{title}</h4>
+                 <div className="text-slate-400"><SimpleMarkdown text={content} /></div>
+               </div>
+             );
+           }) || <p>No findings detailed.</p>}
+         </div>
+       </section>
+
+      {/* Remediation Plan Table */}
+      <section>
+         <div className="flex items-center mb-3 p-2">
+             <h2 className="text-2xl font-bold text-slate-100">Detailed Remediation Plan</h2>
+         </div>
+        <div className="overflow-x-auto bg-slate-800 border border-slate-700 rounded-lg">
+           {remediationItems && remediationItems.length > 0 ? (
+            // FIX: Replaced divs with a semantic and accessible table for remediation items.
+            <table className="min-w-full text-sm text-left text-slate-300 table-fixed">
+                <thead className="bg-slate-900/70 text-xs uppercase text-slate-400">
+                    <tr>
+                        <th scope="col" className="px-6 py-3 w-1/6">Violation ID</th>
+                        <th scope="col" className="px-6 py-3 w-2/6">Issue / Violation</th>
+                        <th scope="col" className="px-6 py-3 w-1/6">OSI Layer</th>
+                        <th scope="col" className="px-6 py-3 w-2/6">Recommended Fix</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {remediationItems.map((item, index) => item && (
+                      <tr key={index} className="border-b border-slate-700 even:bg-slate-800/40 hover:bg-slate-700/50">
+                          <td className="px-6 py-4 font-medium text-blue-400 whitespace-nowrap">{item.violationId}</td>
+                          <td className="px-6 py-4">{item.issue}</td>
+                          <td className="px-6 py-4">{item.osiLayer}</td>
+                          <td className="px-6 py-4"><CodeBlock code={item.fix} /></td>
+                      </tr>
+                    ))}
+                </tbody>
+            </table>
+           ) : (
+             <div className="text-slate-400 p-6 bg-slate-800 rounded-lg border border-slate-700">No remediation items found.</div>
+           )}
+        </div>
+      </section>
     </div>
   );
 };

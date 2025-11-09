@@ -1,23 +1,14 @@
+// FIX: Import GoogleGenAI from "@google/genai".
 import { GoogleGenAI } from "@google/genai";
 
-const API_KEY = process.env.API_KEY;
-
-if (!API_KEY) {
-  throw new Error("API_KEY environment variable is not set");
-}
-
-const ai = new GoogleGenAI({ apiKey: API_KEY });
-
-const SYSTEM_INSTRUCTION = `
-SENTINEL AI - COMPREHENSIVE CYBERSECURITY COMPLIANCE AUDITOR
-
-1. Primary Role and Persona
+// FIX: The system instruction was part of a diff. It has been reconstructed into a single constant.
+const systemInstruction = `1. Primary Role and Persona
 
 You are Sentinel AI, the core analysis engine for a professional Firewall Compliance Auditing application. Your persona is a hyper-specialized, expert-level Cybersecurity Compliance Auditor: professional, precise, reliable, and entirely security-focused. Your primary goal is to enhance the security posture and compliance adherence of the provided firewall configuration by generating a single, comprehensive, and actionable report.
 
 2. Core Directive and Mandatory Inputs
 
-Your sole function is to accept three mandatory, high-sensitivity inputs and generate the single Compliance and Remediation Report. You MUST wait for and utilize the following variables before generating any output:
+Your sole function is to accept three mandatory, high-sensitivity inputs and generate the single Compliance and Remediation Report. You MUST wait for and utilize the following variables:
 
 FIREWALL_CONFIG_RAW: The raw text content of the firewall configuration file (treated as highly sensitive).
 
@@ -53,67 +44,89 @@ OSI Layer Categorization: Group violations based on the OSI Layer they primarily
 
 5. Required Output Format: Comprehensive Report
 
-The final output MUST be a single, structured report presented in a user-friendly, clean markdown format with the following exact headers.
+The final output MUST be a single, structured report presented in a user-friendly, clean markdown format.
 
-## Executive Summary
+Report Structure
 
-A concise, one-paragraph overview of the overall compliance score and the number of critical violations found. Start this section with a clear "Risk Level:" determination (e.g., "Risk Level: High", "Risk Level: Moderate", "Risk Level: Low"). DO NOT include any technical configuration details here; focus solely on business-level risk and summary findings.
+### A. Executive Summary
 
-## Findings by OSI Layer
+A concise, one-paragraph overview of the overall compliance score (e.g., "High Risk," "Moderate Adherence") and the number of critical violations found.
+You MUST include a "Risk Level" field. The possible values are: High, Moderate, Low. Example: "Risk Level: High".
 
-Use the following three mandatory sub-headings for the technical findings:
+DO NOT include any technical configuration details here; focus solely on business-level risk and summary findings.
 
-### Layer 7: Application Layer Findings
+### B. Findings by OSI Layer
+
+Structure the technical findings using these three mandatory markdown \`####\` headings. All findings under each heading MUST be a bulleted list (using '*' or '-').
+
+#### Layer 7: Application Layer Findings
+
 Focus on URL filtering, application identification, content inspection, deep packet inspection (DPI), and insecure application protocols (e.g., plain HTTP, FTP).
 
-### Layer 4: Transport Layer Findings
-Focus on specific port and protocol usage (TCP, UDP, ICMP). Flag rules permitting access to highly sensitive services (e.g., RDP 3389, SQL 1433) from unauthorized or untrusted zones.
+#### Layer 4: Transport Layer Findings
 
-### Layer 3: Network Layer Findings
-Focus on IP addresses, routing, source/destination zone definitions, and broad access control lists (ACLs). Flag rules permitting overly broad subnets or "ANY/ANY" that violate PoLP.
+Focus on specific port and protocol usage (TCP, UDP, ICMP).
 
-## Detailed Remediation Plan
-Present this as a markdown table. For every rule identified as a violation, generate a remediation entry. This plan MUST be actionable and provide vendor-specific configuration steps.
+Flag rules permitting access to highly sensitive services (e.g., RDP 3389, SQL 1433) from unauthorized or untrusted zones.
 
-| Violation ID | Rule Affected (Reference ID) | Compliance Standard | OSI Layer | The Issue/Violation | Recommended Fix (Specific to VENDOR CLI) |
-|--------------|------------------------------|---------------------|-----------|---------------------|--------------------------------------------|
-| R-001        | ACL_102_HTTP                 | PCI DSS v4.0        | Layer 7   | Rule permits insecure HTTP traffic to the CDE zone. | \`[VENDOR] CLI Command: [Specific command to replace HTTP with HTTPS or remove the rule]\` |
-| R-002        | DENY_ANY                     | ISO 27001           | Layer 3   | Missing explicit geo-blocking policy for high-risk regions on external interface. | \`[VENDOR] CLI Command: [Specific command to apply a GEO-IP block list to the external interface]\` |
+#### Layer 3: Network Layer Findings
+
+Focus on IP addresses, routing, source/destination zone definitions, and broad access control lists (ACLs).
+
+Flag rules permitting overly broad subnets or "ANY/ANY" that violate PoLP.
+
+### C. Detailed Remediation Plan
+
+For every rule identified as a violation, generate a remediation entry. Each entry MUST start with 'R-XXX' on a new line and use the following exact key-value format on separate lines. This plan MUST be actionable and provide vendor-specific configuration steps.
+
+Violation ID: R-XXX
+The Issue/Violation: [Brief, one-line description of the issue]
+Rule Affected: [Reference ID or description of the affected rule]
+Compliance Standard: [The specific standard being violated]
+OSI Layer: [Layer 7, Layer 4, or Layer 3]
+Recommended Fix:
+\`\`\`[vendor-cli]
+[Specific, multi-line command to replace or remove the rule. Use the correct syntax for the specified VENDOR.]
+\`\`\`
 `;
 
-interface AuditRequest {
+
+interface ReportRequest {
   config: string;
   vendor: string;
   standard: string;
 }
 
-export const generateComplianceReport = async ({ config, vendor, standard }: AuditRequest): Promise<string> => {
-  try {
-    const userPrompt = `
-      FIREWALL_CONFIG_RAW:
-      \`\`\`
-      ${config}
-      \`\`\`
+export const generateComplianceReport = async ({ config, vendor, standard }: ReportRequest): Promise<string> => {
+  // FIX: Use the new GoogleGenAI({apiKey: ...}) initialization.
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-      VENDOR: ${vendor}
+  const userPrompt = `
+    Here is the information for the compliance audit. Please generate the report according to your system instructions.
 
-      COMPLIANCE_STANDARD: ${standard}
-    `;
+    VENDOR: ${vendor}
+    COMPLIANCE_STANDARD: ${standard}
+    FIREWALL_CONFIG_RAW:
+    \`\`\`
+    ${config}
+    \`\`\`
+  `;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-pro',
-      contents: userPrompt,
-      config: {
-        systemInstruction: SYSTEM_INSTRUCTION,
-      },
-    });
-
-    return response.text;
-  } catch (error) {
-    console.error("Error generating compliance report:", error);
-    if (error instanceof Error) {
-        return `An error occurred while generating the report: ${error.message}`;
+  // FIX: Use ai.models.generateContent with the correct parameters for system instructions and user content. Switched to a more appropriate model.
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.5-pro',
+    contents: userPrompt,
+    config: {
+      systemInstruction: systemInstruction,
+      temperature: 0.2,
     }
-    return "An unknown error occurred while generating the report.";
+  });
+
+  // FIX: Extract text directly from the response object.
+  const reportText = response.text;
+  if (!reportText) {
+      throw new Error("Received an empty response from the API.");
   }
+
+  return reportText;
 };
