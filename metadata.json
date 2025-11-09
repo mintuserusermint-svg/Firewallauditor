@@ -1,0 +1,5 @@
+{
+  "name": "Sentinel AI: Firewall Compliance Auditor",
+  "description": "An advanced tool that leverages AI to audit firewall configurations against major security compliance standards. Upload your configuration, select the vendor and standard, and receive a detailed, actionable remediation report.",
+  "requestFramePermissions": []
+}
